@@ -1,0 +1,24 @@
+# Local development database. Not used in production (Neon is).
+# Start with: docker compose up -d
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lendlot
+      POSTGRES_PASSWORD: lendlot
+      POSTGRES_DB: lendlot
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Creates the separate database used by integration and E2E tests.
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lendlot -d lendlot"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  pgdata:
