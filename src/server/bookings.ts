@@ -1,6 +1,7 @@
 import { prisma } from "./db";
 import { DomainError, isExclusionViolation, isRetryableConflict } from "./errors";
 import { parseIsoDate, toIsoDate, todayIso, type DateRange } from "@/lib/dates";
+import { isActiveMember } from "@/lib/membership";
 import { quotePrice } from "@/lib/pricing";
 import type { BookingInput } from "@/lib/validation";
 
@@ -23,11 +24,17 @@ export async function createBooking(input: BookingInput & { renterId: string }) 
     throw new DomainError("OWN_ITEM", "You can't book your own item.");
   }
 
-  // Price is always recomputed on the server; the client's preview is never trusted.
+  // Price is always recomputed on the server, including the member discount;
+  // the client's preview is never trusted.
+  const renter = await prisma.user.findUnique({
+    where: { id: input.renterId },
+    select: { membershipStatus: true, membershipPeriodEnd: true },
+  });
   const quote = quotePrice({
     dailyPriceCents: item.dailyPriceCents,
     startDate: input.startDate,
     endDate: input.endDate,
+    isMember: isActiveMember(renter),
   });
 
   for (let attempt = 1; ; attempt++) {

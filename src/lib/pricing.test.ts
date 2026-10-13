@@ -32,6 +32,18 @@ describe("quotePrice", () => {
     expect(quotePrice({ dailyPriceCents: 100, startDate: "2026-10-30", endDate: "2026-11-02" }).days).toBe(4);
   });
 
+  it("gives members 15% off", () => {
+    const quote = quotePrice({ dailyPriceCents: 1000, startDate: "2026-11-01", endDate: "2026-11-02", isMember: true });
+    expect(quote.discounts).toEqual([{ label: "Member discount (15%)", amountCents: 300 }]);
+    expect(quote.totalCents).toBe(1700);
+  });
+
+  it("adds the member and weekly discounts together (25% off a week)", () => {
+    const quote = quotePrice({ dailyPriceCents: 1000, startDate: "2026-11-01", endDate: "2026-11-07", isMember: true });
+    expect(quote.discounts.map((d) => d.amountCents)).toEqual([700, 1050]);
+    expect(quote.totalCents).toBe(7000 - 1750);
+  });
+
   it("rejects an end date before the start date", () => {
     expect(() => quotePrice({ dailyPriceCents: 100, startDate: "2026-11-05", endDate: "2026-11-01" })).toThrow();
   });

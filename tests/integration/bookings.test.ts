@@ -42,6 +42,20 @@ describe("booking rules", () => {
     expect(booking.totalCents).toBe(Math.round(7 * 1500 * 0.9));
   });
 
+  it("gives active members 15% off, but not lapsed members", async () => {
+    const nextMonth = new Date(Date.now() + 30 * 86_400_000);
+    await prisma.user.update({
+      where: { id: renter.id },
+      data: { membershipStatus: "ACTIVE", membershipPeriodEnd: nextMonth },
+    });
+    await prisma.user.update({
+      where: { id: otherRenter.id },
+      data: { membershipStatus: "CANCELED", membershipPeriodEnd: nextMonth },
+    });
+    expect((await book(renter.id, 1, 2)).totalCents).toBe(Math.round(2 * 1500 * 0.85));
+    expect((await book(otherRenter.id, 3, 4)).totalCents).toBe(2 * 1500);
+  });
+
   it.each([
     ["identical dates", 2, 4],
     ["overlapping the start", 0, 2],

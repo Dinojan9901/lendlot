@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // logic is tested deterministically here with a mocked Prisma client.
 const db = vi.hoisted(() => ({
   item: { findFirst: vi.fn() },
+  user: { findUnique: vi.fn() },
   booking: { create: vi.fn() },
 }));
 vi.mock("./db", () => ({ prisma: db }));
@@ -22,6 +23,7 @@ describe("createBooking error handling", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     db.item.findFirst.mockResolvedValue({ id: "item_1", ownerId: "owner_1", dailyPriceCents: 1000 });
+    db.user.findUnique.mockResolvedValue({ membershipStatus: "NONE", membershipPeriodEnd: null });
   });
 
   it("retries after a deadlock and then succeeds", async () => {
@@ -63,5 +65,15 @@ describe("createBooking error handling", () => {
     db.booking.create.mockResolvedValue({ id: "b1" });
     await createBooking(input);
     expect(db.booking.create.mock.calls[0][0].data.totalCents).toBe(2000);
+  });
+
+  it("applies the member discount for an active member", async () => {
+    db.user.findUnique.mockResolvedValue({
+      membershipStatus: "ACTIVE",
+      membershipPeriodEnd: new Date(Date.now() + 86_400_000),
+    });
+    db.booking.create.mockResolvedValue({ id: "b1" });
+    await createBooking(input);
+    expect(db.booking.create.mock.calls[0][0].data.totalCents).toBe(1700);
   });
 });
