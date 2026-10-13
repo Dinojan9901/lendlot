@@ -36,7 +36,9 @@ describe("concurrent bookings", () => {
     expect(failed).toHaveLength(PARALLEL_REQUESTS - 1);
     // Every loser failed with the friendly conflict error, not a crash.
     const reasons = failed.map((f) =>
-      f.reason instanceof DomainError ? f.reason.code : `unexpected ${postgresError(f.reason)?.code ?? String(f.reason)}`,
+      f.reason instanceof DomainError
+        ? f.reason.code
+        : `unexpected ${(f.reason as { code?: string }).code ?? postgresError(f.reason)?.code ?? String(f.reason)}`,
     );
     expect(new Set(reasons)).toEqual(new Set(["CONFLICT"]));
     expect(await prisma.booking.count({ where: { itemId: item.id, status: "CONFIRMED" } })).toBe(1);

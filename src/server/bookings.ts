@@ -5,7 +5,7 @@ import { quotePrice } from "@/lib/pricing";
 import type { BookingInput } from "@/lib/validation";
 
 export const OVERLAP_CONSTRAINT = "booking_no_overlap";
-const MAX_INSERT_ATTEMPTS = 3;
+const MAX_INSERT_ATTEMPTS = 5;
 
 /**
  * Creates a booking. There is deliberately no "is it free?" query first:
@@ -48,7 +48,11 @@ export async function createBooking(input: BookingInput & { renterId: string }) 
       // Two overlapping inserts at the same instant can each wait for the
       // other's uncommitted row; Postgres breaks that deadlock by aborting one.
       // Retrying is safe: the retry either succeeds or hits the constraint.
-      if (isRetryableConflict(error) && attempt < MAX_INSERT_ATTEMPTS) continue;
+      if (isRetryableConflict(error) && attempt < MAX_INSERT_ATTEMPTS) {
+        // Small random backoff so retrying requests don't collide again.
+        await new Promise((resolve) => setTimeout(resolve, Math.random() * 25 * attempt));
+        continue;
+      }
       throw error;
     }
   }

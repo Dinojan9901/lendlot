@@ -39,10 +39,18 @@ describe("createBooking error handling", () => {
     expect((error as InstanceType<typeof DomainError>).code).toBe("CONFLICT");
   });
 
-  it("gives up after three deadlocks instead of looping forever", async () => {
+  it("also retries Prisma's wrapped write-conflict error (P2034)", async () => {
+    db.booking.create
+      .mockRejectedValueOnce({ name: "PrismaClientKnownRequestError", code: "P2034" })
+      .mockResolvedValueOnce({ id: "b1" });
+    await expect(createBooking(input)).resolves.toEqual({ id: "b1" });
+    expect(db.booking.create).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up after five deadlocks instead of looping forever", async () => {
     db.booking.create.mockRejectedValue(pgError("40P01"));
     await expect(createBooking(input)).rejects.toMatchObject({ meta: expect.anything() });
-    expect(db.booking.create).toHaveBeenCalledTimes(3);
+    expect(db.booking.create).toHaveBeenCalledTimes(5);
   });
 
   it("does not retry unrelated errors", async () => {

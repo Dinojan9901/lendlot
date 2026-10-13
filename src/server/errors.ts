@@ -47,7 +47,13 @@ export function isExclusionViolation(error: unknown, constraint: string): boolea
   return cause?.code === EXCLUSION_VIOLATION && (cause.message ?? "").includes(constraint);
 }
 
+/** Prisma's own code for "write conflict or deadlock, please retry". */
+const PRISMA_WRITE_CONFLICT = "P2034";
+
 /** True for transient concurrency errors where retrying the statement is safe. */
 export function isRetryableConflict(error: unknown): boolean {
-  return RETRYABLE.has(postgresError(error)?.code ?? "");
+  return (
+    (error as { code?: unknown } | null)?.code === PRISMA_WRITE_CONFLICT ||
+    RETRYABLE.has(postgresError(error)?.code ?? "")
+  );
 }
