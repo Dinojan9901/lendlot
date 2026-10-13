@@ -4,6 +4,7 @@ import { formatDate, toIsoDate } from "@/lib/dates";
 import { isActiveMember, MEMBERSHIP_MONTHLY_CENTS } from "@/lib/membership";
 import { formatCents, MEMBER_DISCOUNT_PERCENT } from "@/lib/pricing";
 import { firstParam } from "@/lib/validation";
+import { ActivationPoller } from "@/components/dashboard/activation-poller";
 import { PaddleCheckout } from "@/components/dashboard/paddle-checkout";
 import { syncCheckoutTransaction } from "@/server/billing";
 import { prisma } from "@/server/db";
@@ -47,7 +48,8 @@ export default async function MembershipPage({ searchParams }: PageProps<"/dashb
       )}
       {completedTransaction && !active && (
         <div role="status" className="mt-4 rounded-xl border border-line bg-white px-4 py-3 text-sm text-muted">
-          Payment received — your membership is being activated. Refresh in a few seconds.
+          Payment received — activating your membership…
+          <ActivationPoller />
         </div>
       )}
       {firstParam(params.checkout) === "cancelled" && (
