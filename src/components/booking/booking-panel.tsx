@@ -1,11 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { createBookingAction, type BookingFormState } from "@/app/actions/bookings";
 import { ErrorSummary } from "@/components/forms/field";
 import { useFocusOnError } from "@/components/forms/use-focus-on-error";
 import { daysInclusive, formatDate, isIsoDate, todayIso, type DateRange } from "@/lib/dates";
-import { formatCents, quotePrice } from "@/lib/pricing";
+import { formatCents, MEMBER_DISCOUNT_PERCENT, quotePrice } from "@/lib/pricing";
 import { MAX_RENTAL_DAYS } from "@/lib/validation";
 import { AvailabilityCalendar, type Selection } from "./availability-calendar";
 
@@ -22,6 +23,7 @@ export function BookingPanel({ itemId, itemSlug, dailyPriceCents }: Props) {
   const [selection, setSelection] = useState<Selection>({});
   const [availability, setAvailability] = useState<{ booked: DateRange[] } | "error" | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [isMember, setIsMember] = useState(false);
   const [today] = useState(() => todayIso());
   const [seenState, setSeenState] = useState(state);
   const formRef = useRef<HTMLFormElement>(null);
@@ -55,10 +57,25 @@ export function BookingPanel({ itemId, itemSlug, dailyPriceCents }: Props) {
     };
   }, [itemId, reloadKey]);
 
+  // Member pricing is per-user, so it's fetched rather than baked into the cached page.
+  // The server applies the discount again when booking; this is only the preview.
+  useEffect(() => {
+    let ignore = false;
+    fetch("/api/me", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { user: { isMember: boolean } | null } | null) => {
+        if (!ignore) setIsMember(Boolean(data?.user?.isMember));
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
   const { start, end } = selection;
   const quote =
     start && end && isIsoDate(start) && isIsoDate(end) && end >= start && daysInclusive(start, end) <= MAX_RENTAL_DAYS
-      ? quotePrice({ dailyPriceCents, startDate: start, endDate: end })
+      ? quotePrice({ dailyPriceCents, startDate: start, endDate: end, isMember })
       : null;
 
   const startError = state.fieldErrors?.startDate;
@@ -175,7 +192,18 @@ export function BookingPanel({ itemId, itemSlug, dailyPriceCents }: Props) {
         <button type="submit" className="btn-primary w-full" disabled={pending}>
           {pending ? "Booking…" : "Confirm booking"}
         </button>
-        <p className="text-center text-xs text-muted">You won&apos;t be charged in this demo.</p>
+        <p className="text-center text-xs text-muted">
+          {isMember ? (
+            <>Member price applied. You won&apos;t be charged in this demo.</>
+          ) : (
+            <>
+              Members save {MEMBER_DISCOUNT_PERCENT}%.{" "}
+              <Link href="/dashboard/membership" className="font-medium text-brand-700 underline">
+                Become a member
+              </Link>
+            </>
+          )}
+        </p>
       </form>
     </div>
   );
