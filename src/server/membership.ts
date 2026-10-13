@@ -1,16 +1,12 @@
 import type Stripe from "stripe";
 import { prisma } from "./db";
 import { postgresError } from "./errors";
+import { STRIPE_WEBHOOK_EVENTS } from "@/lib/membership";
 import type { MembershipStatus } from "@/generated/prisma/enums";
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
-export const HANDLED_EVENTS = new Set([
-  "checkout.session.completed",
-  "customer.subscription.created",
-  "customer.subscription.updated",
-  "customer.subscription.deleted",
-]);
+const HANDLED_EVENTS = new Set<string>(STRIPE_WEBHOOK_EVENTS);
 
 export function toMembershipStatus(status: Stripe.Subscription.Status): MembershipStatus {
   switch (status) {

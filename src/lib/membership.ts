@@ -1,6 +1,14 @@
 /** Shown on the membership page; the amount actually charged comes from the Stripe price. */
 export const MEMBERSHIP_MONTHLY_CENTS = 900;
 
+/** The Stripe events the webhook handles (and subscribes to). */
+export const STRIPE_WEBHOOK_EVENTS = [
+  "checkout.session.completed",
+  "customer.subscription.created",
+  "customer.subscription.updated",
+  "customer.subscription.deleted",
+] as const;
+
 type MembershipFields = {
   membershipStatus: string;
   membershipPeriodEnd: Date | string | null;
