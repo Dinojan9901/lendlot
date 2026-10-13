@@ -45,6 +45,7 @@ test.describe("booking flow", () => {
 
   test("signed-out users are sent to sign in, then back to the item", async ({ page }) => {
     await page.goto("/items/sit-on-top-kayak");
+    await expect(page.getByRole("grid")).toBeVisible(); // hydrated and interactive
     await page.getByLabel("Start date").fill(dayFromToday(25));
     await page.getByLabel("End date").fill(dayFromToday(26));
     await page.getByRole("button", { name: "Confirm booking" }).click();
@@ -59,6 +60,7 @@ test.describe("booking flow", () => {
   test("invalid dates focus the first invalid field", async ({ page }) => {
     await signIn(page, "renter@lendlot.test");
     await page.goto("/items/sit-on-top-kayak");
+    await expect(page.getByRole("grid")).toBeVisible(); // hydrated and interactive
     await page.getByLabel("Start date").fill(dayFromToday(10));
     await page.getByLabel("End date").fill(dayFromToday(5));
     await page.getByRole("button", { name: "Confirm booking" }).click();

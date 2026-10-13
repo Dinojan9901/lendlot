@@ -9,8 +9,12 @@ const PARALLEL_REQUESTS = 25;
 describe("concurrent bookings", () => {
   beforeEach(resetDatabase);
 
-  // Repeated because a race only shows up some of the time.
-  it(`lets exactly one of ${PARALLEL_REQUESTS} simultaneous overlapping bookings succeed`, { repeats: 4 }, async () => {
+  // Repeated because a race only shows up some of the time. Generous timeout:
+  // Postgres waits deadlock_timeout (1s) before resolving each deadlock.
+  it(
+    `lets exactly one of ${PARALLEL_REQUESTS} simultaneous overlapping bookings succeed`,
+    { repeats: 4, timeout: 120_000 },
+    async () => {
     await resetDatabase();
     const owner = await createUser("OWNER");
     const item = await createItem(owner.id);
@@ -42,7 +46,8 @@ describe("concurrent bookings", () => {
     );
     expect(new Set(reasons)).toEqual(new Set(["CONFLICT"]));
     expect(await prisma.booking.count({ where: { itemId: item.id, status: "CONFIRMED" } })).toBe(1);
-  });
+    },
+  );
 
   it("lets non-overlapping bookings made at the same time all succeed", async () => {
     const owner = await createUser("OWNER");
