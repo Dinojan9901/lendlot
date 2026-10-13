@@ -1,12 +1,16 @@
-/** Shown on the membership page; the amount actually charged comes from the Stripe price. */
+/** Shown on the membership page; the amount actually charged comes from the Paddle price. */
 export const MEMBERSHIP_MONTHLY_CENTS = 900;
 
-/** The Stripe events the webhook handles (and subscribes to). */
-export const STRIPE_WEBHOOK_EVENTS = [
-  "checkout.session.completed",
-  "customer.subscription.created",
-  "customer.subscription.updated",
-  "customer.subscription.deleted",
+/** The Paddle events the webhook handles (and subscribes to); each carries the subscription. */
+export const BILLING_WEBHOOK_EVENTS = [
+  "subscription.created",
+  "subscription.updated",
+  "subscription.activated",
+  "subscription.canceled",
+  "subscription.past_due",
+  "subscription.paused",
+  "subscription.resumed",
+  "subscription.trialing",
 ] as const;
 
 type MembershipFields = {

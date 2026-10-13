@@ -1,66 +1,59 @@
-import type Stripe from "stripe";
 import { prisma } from "./db";
-import { syncSubscription } from "./membership";
-import { membershipPriceId, stripe } from "./stripe";
+import { fromPaddleSubscription, syncSubscription } from "./membership";
+import {
+  createMembershipTransaction,
+  createPortalSession,
+  findOrCreateCustomer,
+  getSubscription,
+  getTransaction,
+} from "./paddle";
 
 type BillingUser = { id: string; name: string; email: string };
 
 /**
- * The user's Stripe customer, created on first use. It is linked *before*
- * Checkout starts, so every later webhook can find the user by customer id
- * regardless of the order Stripe delivers events in. The idempotency key stops
- * a double-click from creating two customers.
+ * The user's Paddle customer, created on first use and linked *before*
+ * checkout, so every later webhook can find the user by customer id
+ * regardless of the order events arrive in.
  */
-export async function ensureStripeCustomer(user: BillingUser): Promise<string> {
-  const existing = await prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { stripeCustomerId: true } });
-  if (existing.stripeCustomerId) return existing.stripeCustomerId;
+export async function ensureBillingCustomer(user: BillingUser): Promise<string> {
+  const existing = await prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { billingCustomerId: true } });
+  if (existing.billingCustomerId) return existing.billingCustomerId;
 
-  const customer = await stripe().customers.create(
-    { email: user.email, name: user.name, metadata: { userId: user.id } },
-    { idempotencyKey: `lendlot-customer-${user.id}` },
-  );
+  const customerId = await findOrCreateCustomer({ email: user.email, name: user.name, userId: user.id });
   await prisma.user.updateMany({
-    where: { id: user.id, stripeCustomerId: null },
-    data: { stripeCustomerId: customer.id },
+    where: { id: user.id, billingCustomerId: null },
+    data: { billingCustomerId: customerId },
   });
-  const linked = await prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { stripeCustomerId: true } });
-  return linked.stripeCustomerId!;
-}
-
-export async function createMembershipCheckout(user: BillingUser, origin: string): Promise<string> {
-  const customer = await ensureStripeCustomer(user);
-  const session = await stripe().checkout.sessions.create({
-    mode: "subscription",
-    customer,
-    client_reference_id: user.id,
-    line_items: [{ price: membershipPriceId(), quantity: 1 }],
-    subscription_data: { metadata: { userId: user.id } },
-    success_url: `${origin}/dashboard/membership?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${origin}/dashboard/membership?checkout=cancelled`,
-  });
-  if (!session.url) throw new Error("Stripe did not return a Checkout URL");
-  return session.url;
-}
-
-export async function createBillingPortal(customerId: string, origin: string): Promise<string> {
-  const session = await stripe().billingPortal.sessions.create({
-    customer: customerId,
-    return_url: `${origin}/dashboard/membership`,
-  });
-  return session.url;
+  return customerId;
 }
 
 /**
- * Called when the user returns from Checkout: fetch the subscription live and
- * apply it right away, so the page shows the membership without waiting for
- * the webhook. Uses the same compare-and-set as the webhook, with "now" as the
- * time the state was observed.
+ * Creates the transaction on the server (customer, price and user are set
+ * here, not in the browser) and returns its id for Paddle Checkout to open.
  */
-export async function syncCheckoutSession(sessionId: string, userId: string): Promise<void> {
-  const session = await stripe().checkout.sessions.retrieve(sessionId, { expand: ["subscription"] });
-  if (session.client_reference_id !== userId) return;
-  const subscription = session.subscription as Stripe.Subscription | string | null;
-  if (subscription && typeof subscription !== "string") {
-    await syncSubscription(prisma, subscription, new Date());
-  }
+export async function startMembershipCheckout(user: BillingUser): Promise<string> {
+  const priceId = process.env.PADDLE_PRICE_ID;
+  if (!priceId) throw new Error("PADDLE_PRICE_ID is not set");
+  const customerId = await ensureBillingCustomer(user);
+  return createMembershipTransaction(customerId, user.id, priceId);
+}
+
+/**
+ * Called when the user returns from checkout: fetch the subscription live and
+ * apply it now, so the page doesn't wait for the webhook. Uses the same
+ * compare-and-set as the webhook, with "now" as the time it was observed.
+ * Returns false if the subscription isn't ready yet (the webhook will follow).
+ */
+export async function syncCheckoutTransaction(transactionId: string, userId: string): Promise<boolean> {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { billingCustomerId: true } });
+  const transaction = await getTransaction(transactionId);
+  if (!user.billingCustomerId || transaction.customer_id !== user.billingCustomerId) return false;
+  if (!transaction.subscription_id) return false;
+  const subscription = await getSubscription(transaction.subscription_id);
+  await syncSubscription(prisma, fromPaddleSubscription(subscription), new Date());
+  return true;
+}
+
+export async function membershipPortalUrl(customerId: string, subscriptionId: string | null): Promise<string> {
+  return createPortalSession(customerId, subscriptionId ? [subscriptionId] : []);
 }

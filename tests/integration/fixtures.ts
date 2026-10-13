@@ -3,7 +3,7 @@ import { addDays, todayIso } from "@/lib/dates";
 import type { Role } from "@/generated/prisma/enums";
 
 export async function resetDatabase() {
-  await prisma.$executeRawUnsafe('TRUNCATE "Booking", "Item", "Category", "User", "StripeEvent" CASCADE');
+  await prisma.$executeRawUnsafe('TRUNCATE "Booking", "Item", "Category", "User", "BillingEvent" CASCADE');
 }
 
 let counter = 0;

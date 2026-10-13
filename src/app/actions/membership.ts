@@ -1,22 +1,15 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { isActiveMember } from "@/lib/membership";
-import { siteUrl } from "@/lib/site";
-import { createBillingPortal, createMembershipCheckout } from "@/server/billing";
+import { membershipPortalUrl, startMembershipCheckout } from "@/server/billing";
 import { prisma } from "@/server/db";
+import { isPaddleConfigured } from "@/server/paddle";
 import { requireUser } from "@/server/session";
-import { isStripeConfigured } from "@/server/stripe";
-
-/** Where to send the user back to: this deployment's own origin. */
-async function requestOrigin(): Promise<string> {
-  return (await headers()).get("origin") ?? siteUrl();
-}
 
 export async function startMembershipCheckoutAction() {
   const user = await requireUser("/dashboard/membership");
-  if (!isStripeConfigured()) redirect("/dashboard/membership?error=unavailable");
+  if (!isPaddleConfigured()) redirect("/dashboard/membership?error=unavailable");
 
   const membership = await prisma.user.findUniqueOrThrow({
     where: { id: user.id },
@@ -24,18 +17,19 @@ export async function startMembershipCheckoutAction() {
   });
   if (isActiveMember(membership)) redirect("/dashboard/membership");
 
-  const url = await createMembershipCheckout(user, await requestOrigin());
-  redirect(url);
+  // Back to the membership page with the transaction id; Paddle Checkout
+  // opens there as an overlay for this server-created transaction.
+  const transactionId = await startMembershipCheckout(user);
+  redirect(`/dashboard/membership?_ptxn=${encodeURIComponent(transactionId)}`);
 }
 
 export async function manageMembershipAction() {
   const user = await requireUser("/dashboard/membership");
-  const { stripeCustomerId } = await prisma.user.findUniqueOrThrow({
+  const { billingCustomerId, billingSubscriptionId } = await prisma.user.findUniqueOrThrow({
     where: { id: user.id },
-    select: { stripeCustomerId: true },
+    select: { billingCustomerId: true, billingSubscriptionId: true },
   });
-  if (!stripeCustomerId || !isStripeConfigured()) redirect("/dashboard/membership?error=unavailable");
+  if (!billingCustomerId || !isPaddleConfigured()) redirect("/dashboard/membership?error=unavailable");
 
-  const url = await createBillingPortal(stripeCustomerId, await requestOrigin());
-  redirect(url);
+  redirect(await membershipPortalUrl(billingCustomerId, billingSubscriptionId));
 }
