@@ -40,7 +40,10 @@ async function main() {
   await prisma.category.deleteMany();
   await prisma.user.deleteMany();
 
-  const passwordHash = await hashPassword(DEMO_PASSWORD);
+  // Local development and tests use the public DEMO_PASSWORD; a deployed site
+  // is seeded with a private one so the published password doesn't work there.
+  const demoPassword = process.env.SEED_DEMO_PASSWORD || DEMO_PASSWORD;
+  const passwordHash = await hashPassword(demoPassword);
   const userIds = {} as Record<UserKey, string>;
   for (const user of users) {
     const created = await prisma.user.create({
@@ -97,7 +100,11 @@ async function main() {
   console.log(
     `Seeded ${users.length} users, ${categories.length} categories, ${items.length} items, ${sampleBookings.length} bookings.`,
   );
-  console.log(`Demo accounts: ${users.map((u) => u.email).join(", ")} — password "${DEMO_PASSWORD}"`);
+  console.log(
+    `Sample accounts: ${users.map((u) => u.email).join(", ")} — password ${
+      process.env.SEED_DEMO_PASSWORD ? "from SEED_DEMO_PASSWORD" : `"${DEMO_PASSWORD}"`
+    }`,
+  );
 }
 
 main()

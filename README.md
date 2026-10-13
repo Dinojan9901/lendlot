@@ -2,13 +2,7 @@
 
 A peer-to-peer rental marketplace: people list things they own (drills, tents, cameras, PA speakers…) and others rent them by the day.
 
-**Live demo:** https://lendlot.vercel.app
-
-| Demo account          | Role   | Password       |
-| --------------------- | ------ | -------------- |
-| `renter@lendlot.test` | Renter | `lendlot-demo` |
-| `owner@lendlot.test`  | Owner  | `lendlot-demo` |
-| `admin@lendlot.test`  | Admin  | `lendlot-demo` |
+**Live site:** https://lendlot.vercel.app — create an account to try it (sign up as an owner to list items).
 
 ## What it does
 
@@ -159,7 +153,7 @@ npm install
 cp .env.example .env          # then set AUTH_SECRET (npx auth secret)
 npm run db:up                 # Postgres 17 on localhost:5433 (+ a test database)
 npx prisma migrate deploy     # create tables and the exclusion constraint
-npm run db:seed               # 24 sample listings + demo accounts
+npm run db:seed               # 24 sample listings + sample accounts (password: lendlot-demo)
 npm run dev                   # http://localhost:3000
 ```
 
@@ -178,4 +172,4 @@ GitHub Actions runs all of the above on every push and pull request ([workflow](
 
 ## Deployment
 
-Vercel hosts the app; Neon provides Postgres (it supports `btree_gist`). The `vercel-build` script runs `prisma migrate deploy` before `next build`. Required environment variables: `DATABASE_URL` (pooled), `DATABASE_URL_UNPOOLED` (direct, used for migrations) and `AUTH_SECRET`. For membership also `PADDLE_API_KEY`, `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN`, `PADDLE_PRICE_ID` and `PADDLE_WEBHOOK_SECRET` (all sandbox); `npm run billing:setup -- --webhook-url=https://<domain>/api/webhooks/paddle` creates the price and the webhook destination.
+Vercel hosts the app; Neon provides Postgres (it supports `btree_gist`). The `vercel-build` script runs `prisma migrate deploy` before `next build`. Required environment variables: `DATABASE_URL` (pooled), `DATABASE_URL_UNPOOLED` (direct, used for migrations) and `AUTH_SECRET`. For membership also `PADDLE_API_KEY`, `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN`, `PADDLE_PRICE_ID` and `PADDLE_WEBHOOK_SECRET` (all sandbox); `npm run billing:setup -- --webhook-url=https://<domain>/api/webhooks/paddle` creates the price and the webhook destination. When seeding a deployed database, set `SEED_DEMO_PASSWORD` so the sample accounts there don't use the public development password.
