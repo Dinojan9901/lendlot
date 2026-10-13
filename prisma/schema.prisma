@@ -13,6 +13,13 @@ enum Role {
   ADMIN
 }
 
+enum MembershipStatus {
+  NONE
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
 enum BookingStatus {
   CONFIRMED
   CANCELLED
@@ -27,6 +34,24 @@ model User {
   createdAt    DateTime  @default(now())
   items        Item[]
   bookings     Booking[]
+
+  // Membership, kept in sync by the Stripe webhook.
+  stripeCustomerId     String?          @unique
+  stripeSubscriptionId String?          @unique
+  membershipStatus     MembershipStatus @default(NONE)
+  membershipPeriodEnd  DateTime?
+  /// Stripe `created` time of the last subscription event applied, so an
+  /// older event delivered late can't overwrite newer state.
+  membershipSyncedAt   DateTime?
+}
+
+/// Every processed Stripe webhook event. Inserting the event id in the same
+/// transaction as its effect makes webhook handling idempotent: a redelivered
+/// event hits the primary key and is skipped.
+model StripeEvent {
+  id          String   @id
+  type        String
+  processedAt DateTime @default(now())
 }
 
 model Category {
