@@ -8,6 +8,7 @@ const { auth } = NextAuth(authConfig);
 const ROLE_RULES: { prefix: string; roles: string[] }[] = [
   { prefix: "/admin", roles: ["ADMIN"] },
   { prefix: "/dashboard/listings", roles: ["OWNER", "ADMIN"] },
+  { prefix: "/dashboard/earnings", roles: ["OWNER", "ADMIN"] },
   { prefix: "/dashboard", roles: ["RENTER", "OWNER", "ADMIN"] },
 ];
 

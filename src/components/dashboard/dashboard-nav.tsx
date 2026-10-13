@@ -13,10 +13,18 @@ export async function DashboardNav() {
           <NavLink href="/dashboard/bookings">My bookings</NavLink>
         </li>
         {isOwner && (
-          <li>
-            <NavLink href="/dashboard/listings">My listings</NavLink>
-          </li>
+          <>
+            <li>
+              <NavLink href="/dashboard/listings">My listings</NavLink>
+            </li>
+            <li>
+              <NavLink href="/dashboard/earnings">Earnings</NavLink>
+            </li>
+          </>
         )}
+        <li>
+          <NavLink href="/dashboard/membership">Membership</NavLink>
+        </li>
       </ul>
     </nav>
   );

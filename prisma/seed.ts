@@ -10,14 +10,27 @@ const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL is not set");
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 
-/** Bookings relative to today so the demo calendar always has booked days. */
-const sampleBookings: { item: string; startOffset: number; days: number }[] = [
+/**
+ * Bookings relative to today: future ones so the calendar always shows booked
+ * days, and past ones so owners' earnings dashboards have some history.
+ */
+const sampleBookings: { item: string; startOffset: number; days: number; renter?: UserKey }[] = [
   { item: "cordless-drill-driver-kit", startOffset: 3, days: 3 },
   { item: "cordless-drill-driver-kit", startOffset: 12, days: 2 },
   { item: "four-person-dome-tent", startOffset: 5, days: 4 },
   { item: "outdoor-projector-and-screen", startOffset: 8, days: 1 },
   { item: "full-frame-mirrorless-camera", startOffset: 2, days: 7 },
   { item: "sit-on-top-kayak", startOffset: 10, days: 3 },
+  // History (Maya's items, rented by Alex and Daniel)
+  { item: "electric-pressure-washer", startOffset: -150, days: 2 },
+  { item: "powered-pa-speaker-pair", startOffset: -120, days: 2, renter: "owner2" },
+  { item: "outdoor-projector-and-screen", startOffset: -95, days: 1 },
+  { item: "compact-4k-camera-drone", startOffset: -70, days: 3, renter: "owner2" },
+  { item: "touring-skis-with-skins", startOffset: -60, days: 7 },
+  { item: "retro-popcorn-machine", startOffset: -40, days: 1, renter: "owner2" },
+  { item: "powered-pa-speaker-pair", startOffset: -25, days: 3 },
+  { item: "cordless-drill-driver-kit", startOffset: -12, days: 2 },
+  { item: "two-burner-camping-stove", startOffset: -6, days: 4, renter: "owner2" },
 ];
 
 async function main() {
@@ -73,7 +86,7 @@ async function main() {
     await prisma.booking.create({
       data: {
         itemId: item.id,
-        renterId: userIds.renter,
+        renterId: userIds[booking.renter ?? "renter"],
         startDate: parseIsoDate(startDate),
         endDate: parseIsoDate(endDate),
         totalCents: quotePrice({ dailyPriceCents: item.dailyPriceCents, startDate, endDate }).totalCents,
