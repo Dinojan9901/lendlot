@@ -1,10 +1,11 @@
 import { prisma } from "./db";
-import { DomainError, isExclusionViolation } from "./errors";
+import { DomainError, isExclusionViolation, isRetryableConflict } from "./errors";
 import { parseIsoDate, toIsoDate, todayIso, type DateRange } from "@/lib/dates";
 import { quotePrice } from "@/lib/pricing";
 import type { BookingInput } from "@/lib/validation";
 
 export const OVERLAP_CONSTRAINT = "booking_no_overlap";
+const MAX_INSERT_ATTEMPTS = 3;
 
 /**
  * Creates a booking. There is deliberately no "is it free?" query first:
@@ -29,21 +30,27 @@ export async function createBooking(input: BookingInput & { renterId: string }) 
     endDate: input.endDate,
   });
 
-  try {
-    return await prisma.booking.create({
-      data: {
-        itemId: item.id,
-        renterId: input.renterId,
-        startDate: parseIsoDate(input.startDate),
-        endDate: parseIsoDate(input.endDate),
-        totalCents: quote.totalCents,
-      },
-    });
-  } catch (error) {
-    if (isExclusionViolation(error, OVERLAP_CONSTRAINT)) {
-      throw new DomainError("CONFLICT", "Sorry, some of those dates were just booked. Please pick other dates.");
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await prisma.booking.create({
+        data: {
+          itemId: item.id,
+          renterId: input.renterId,
+          startDate: parseIsoDate(input.startDate),
+          endDate: parseIsoDate(input.endDate),
+          totalCents: quote.totalCents,
+        },
+      });
+    } catch (error) {
+      if (isExclusionViolation(error, OVERLAP_CONSTRAINT)) {
+        throw new DomainError("CONFLICT", "Sorry, some of those dates were just booked. Please pick other dates.");
+      }
+      // Two overlapping inserts at the same instant can each wait for the
+      // other's uncommitted row; Postgres breaks that deadlock by aborting one.
+      // Retrying is safe: the retry either succeeds or hits the constraint.
+      if (isRetryableConflict(error) && attempt < MAX_INSERT_ATTEMPTS) continue;
+      throw error;
     }
-    throw error;
   }
 }
 

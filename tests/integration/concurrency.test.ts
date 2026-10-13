@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createBooking } from "@/server/bookings";
 import { prisma } from "@/server/db";
-import { DomainError } from "@/server/errors";
+import { DomainError, postgresError } from "@/server/errors";
 import { createItem, createUser, day, resetDatabase } from "./fixtures";
 
 const PARALLEL_REQUESTS = 25;
@@ -9,7 +9,9 @@ const PARALLEL_REQUESTS = 25;
 describe("concurrent bookings", () => {
   beforeEach(resetDatabase);
 
-  it(`lets exactly one of ${PARALLEL_REQUESTS} simultaneous overlapping bookings succeed`, async () => {
+  // Repeated because a race only shows up some of the time.
+  it(`lets exactly one of ${PARALLEL_REQUESTS} simultaneous overlapping bookings succeed`, { repeats: 4 }, async () => {
+    await resetDatabase();
     const owner = await createUser("OWNER");
     const item = await createItem(owner.id);
     const renters = await Promise.all(Array.from({ length: PARALLEL_REQUESTS }, () => createUser("RENTER")));
@@ -33,10 +35,10 @@ describe("concurrent bookings", () => {
     expect(succeeded).toHaveLength(1);
     expect(failed).toHaveLength(PARALLEL_REQUESTS - 1);
     // Every loser failed with the friendly conflict error, not a crash.
-    for (const failure of failed) {
-      expect(failure.reason).toBeInstanceOf(DomainError);
-      expect((failure.reason as DomainError).code).toBe("CONFLICT");
-    }
+    const reasons = failed.map((f) =>
+      f.reason instanceof DomainError ? f.reason.code : `unexpected ${postgresError(f.reason)?.code ?? String(f.reason)}`,
+    );
+    expect(new Set(reasons)).toEqual(new Set(["CONFLICT"]));
     expect(await prisma.booking.count({ where: { itemId: item.id, status: "CONFIRMED" } })).toBe(1);
   });
 
