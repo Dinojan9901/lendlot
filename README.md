@@ -148,7 +148,7 @@ Vercel hosts the app; Neon provides Postgres (it supports `btree_gist`). The `ve
 
 ## How I used AI tools
 
-I built this project with **Claude Code** (Anthropic's AI coding agent) as a pair programmer, and every commit says so with a `Co-Authored-By` line.
+I built this project with **Claude Code** (Anthropic's AI coding agent) as a pair programmer.
 
 - **What I did:** chose the product and the stack, and wrote the requirements: the features, the database-level double-booking rule, the concurrency test, the roles, the accessibility goals, the testing and CI setup, and the rule of small commits with honest history.
 - **What the AI did:** proposed the design details, wrote most of the implementation, tests and this README, ran the test suites, and debugged failures — for example the Next 16 Cache Components rules, Prisma 7's error shape for constraint violations, and slow-machine E2E timeouts.
