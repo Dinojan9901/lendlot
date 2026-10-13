@@ -194,7 +194,7 @@ export function BookingPanel({ itemId, itemSlug, dailyPriceCents }: Props) {
         </button>
         <p className="text-center text-xs text-muted">
           {isMember ? (
-            <>Member price applied. You won&apos;t be charged in this demo.</>
+            <>Member price applied. No payment is taken for bookings.</>
           ) : (
             <>
               Members save {MEMBER_DISCOUNT_PERCENT}%.{" "}
