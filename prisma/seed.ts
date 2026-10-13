@@ -31,23 +31,26 @@ async function main() {
   const userIds = {} as Record<UserKey, string>;
   for (const user of users) {
     const created = await prisma.user.create({
-      data: { name: user.name, email: user.email, role: user.role, passwordHash },
+      data: { id: `user_${user.key}`, name: user.name, email: user.email, role: user.role, passwordHash },
     });
     userIds[user.key] = created.id;
   }
 
   const categoryIds: Record<string, string> = {};
   for (const category of categories) {
-    const created = await prisma.category.create({ data: category });
+    const created = await prisma.category.create({ data: { id: `cat_${category.slug}`, ...category } });
     categoryIds[category.slug] = created.id;
   }
 
   const itemIds: Record<string, { id: string; dailyPriceCents: number }> = {};
+  // Seeded rows get stable ids, so re-seeding (e.g. before E2E runs) never
+  // invalidates pages that were prerendered from an earlier seed.
   // Stagger createdAt so "newest first" ordering is stable and meaningful.
   const now = Date.now();
   for (const [index, item] of items.entries()) {
     const created = await prisma.item.create({
       data: {
+        id: `item_${item.slug}`,
         slug: item.slug,
         title: item.title,
         description: item.description,
