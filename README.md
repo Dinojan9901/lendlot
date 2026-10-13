@@ -2,7 +2,7 @@
 
 A peer-to-peer rental marketplace: people list things they own (drills, tents, cameras, PA speakers…) and others rent them by the day.
 
-**Live demo:** _coming soon (Vercel + Neon)_
+**Live demo:** https://lendlot.vercel.app
 
 | Demo account          | Role   | Password       |
 | --------------------- | ------ | -------------- |
