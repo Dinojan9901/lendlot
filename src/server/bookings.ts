@@ -39,22 +39,34 @@ export async function createBooking(input: BookingInput & { renterId: string }) 
 
   for (let attempt = 1; ; attempt++) {
     try {
-      return await prisma.booking.create({
-        data: {
-          itemId: item.id,
-          renterId: input.renterId,
-          startDate: parseIsoDate(input.startDate),
-          endDate: parseIsoDate(input.endDate),
-          totalCents: quote.totalCents,
+      return await prisma.$transaction(
+        async (tx) => {
+          // Without this, overlapping inserts that arrive at the same instant
+          // can each wait for the other's uncommitted row inside the exclusion
+          // check, and Postgres has to abort one as a deadlock (after a 1s
+          // wait). Locking the item row first makes concurrent bookings of the
+          // *same* item queue up; each then hits the constraint cleanly.
+          // Bookings of different items still run in parallel. The constraint,
+          // not this lock, is what guarantees no double booking.
+          await tx.$executeRaw`SELECT 1 FROM "Item" WHERE "id" = ${item.id} FOR UPDATE`;
+          return tx.booking.create({
+            data: {
+              itemId: item.id,
+              renterId: input.renterId,
+              startDate: parseIsoDate(input.startDate),
+              endDate: parseIsoDate(input.endDate),
+              totalCents: quote.totalCents,
+            },
+          });
         },
-      });
+        { maxWait: 10_000, timeout: 10_000 },
+      );
     } catch (error) {
       if (isExclusionViolation(error, OVERLAP_CONSTRAINT)) {
         throw new DomainError("CONFLICT", "Sorry, some of those dates were just booked. Please pick other dates.");
       }
-      // Two overlapping inserts at the same instant can each wait for the
-      // other's uncommitted row; Postgres breaks that deadlock by aborting one.
-      // Retrying is safe: the retry either succeeds or hits the constraint.
+      // Safety net: if a deadlock or serialization failure still happens,
+      // retrying is safe; the retry either succeeds or hits the constraint.
       if (isRetryableConflict(error) && attempt < MAX_INSERT_ATTEMPTS) {
         // Small random backoff so retrying requests don't collide again.
         await new Promise((resolve) => setTimeout(resolve, Math.random() * 25 * attempt));

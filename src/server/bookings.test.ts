@@ -2,11 +2,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Deadlocks between concurrent inserts are timing-dependent, so the retry
 // logic is tested deterministically here with a mocked Prisma client.
-const db = vi.hoisted(() => ({
-  item: { findFirst: vi.fn() },
-  user: { findUnique: vi.fn() },
-  booking: { create: vi.fn() },
-}));
+const db = vi.hoisted(() => {
+  const client = {
+    item: { findFirst: vi.fn() },
+    user: { findUnique: vi.fn() },
+    booking: { create: vi.fn() },
+    $executeRaw: vi.fn(),
+    // Run the transaction callback against the same mock client.
+    $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(client)),
+  };
+  return client;
+});
 vi.mock("./db", () => ({ prisma: db }));
 
 const { createBooking } = await import("./bookings");
@@ -21,7 +27,8 @@ const input = { itemId: "item_1", renterId: "user_1", startDate: "2026-11-01", e
 
 describe("createBooking error handling", () => {
   beforeEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
+    db.booking.create.mockReset();
     db.item.findFirst.mockResolvedValue({ id: "item_1", ownerId: "owner_1", dailyPriceCents: 1000 });
     db.user.findUnique.mockResolvedValue({ membershipStatus: "NONE", membershipPeriodEnd: null });
   });
@@ -59,6 +66,13 @@ describe("createBooking error handling", () => {
     db.booking.create.mockRejectedValue(pgError("23503"));
     await expect(createBooking(input)).rejects.toBeDefined();
     expect(db.booking.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("locks the item row before inserting, so same-item bookings queue up", async () => {
+    db.booking.create.mockResolvedValue({ id: "b1" });
+    await createBooking(input);
+    expect(db.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(db.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(db.booking.create.mock.invocationCallOrder[0]);
   });
 
   it("charges the server-computed price, never a client value", async () => {
