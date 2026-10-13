@@ -18,7 +18,8 @@
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset --force",
     "images": "tsx scripts/generate-item-images.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "vercel-build": "prisma migrate deploy && next build"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
@@ -50,5 +51,8 @@
     "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^5.0.4"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
