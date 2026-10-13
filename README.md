@@ -17,12 +17,12 @@ A peer-to-peer rental marketplace: people list things they own (drills, tents, c
 - **Booking**: pick a date range → live price (10% off for 7+ days) → confirm. Double-booking is impossible, enforced by **PostgreSQL itself**.
 - **Accounts and roles**: renters book, owners manage their own listings, admins manage users.
 - **Dashboards**: "My bookings" (with cancellation), "My listings" (create, edit, hide) and an owner **earnings** dashboard (earned to date, upcoming revenue, revenue by month, upcoming bookings).
-- **Membership**: a monthly subscription through **Stripe Checkout** (test mode) that gives 15% off every rental, kept in sync by an **idempotent webhook**.
+- **Membership**: a monthly subscription through **Paddle Billing** (sandbox) that gives 15% off every rental, kept in sync by an **idempotent webhook**.
 - **REST API** for items and bookings, used by the client components.
 
 ## Tech stack
 
-Next.js 16 (App Router, Cache Components) · React 19 · TypeScript (strict) · Tailwind CSS 4 · PostgreSQL 17 + Prisma 7 · Auth.js v5 · Zod 4 · Stripe (test mode) · Vitest + React Testing Library · Playwright + axe · Docker Compose · GitHub Actions · Vercel + Neon
+Next.js 16 (App Router, Cache Components) · React 19 · TypeScript (strict) · Tailwind CSS 4 · PostgreSQL 17 + Prisma 7 · Auth.js v5 · Zod 4 · Paddle Billing (sandbox) · Vitest + React Testing Library · Playwright + axe · Docker Compose · GitHub Actions · Vercel + Neon
 
 ## Architecture
 
@@ -37,17 +37,17 @@ flowchart LR
     Pages[Server Components<br/>'use cache' reads]
     Actions[Server Actions<br/>book, save listing, sign in]
     API[Route Handlers<br/>/api/items, /api/bookings, /api/me]
-    Webhook["Webhook<br/>/api/webhooks/stripe"]
+    Webhook["Webhook<br/>/api/webhooks/paddle"]
     Services[src/server<br/>bookings, listings, items,<br/>membership, earnings]
   end
   DB[(PostgreSQL<br/>exclusion constraint)]
-  Stripe[(Stripe<br/>test mode)]
+  Paddle[(Paddle<br/>sandbox)]
 
   RSC --> Proxy --> Pages --> Services
   CC -- fetch --> API --> Services
   CC -- form --> Actions --> Services
-  Actions -- Checkout / portal --> Stripe
-  Stripe -- signed events --> Webhook --> Services
+  Actions -- transaction / portal --> Paddle
+  Paddle -- signed events --> Webhook --> Services
   Services --> DB
 ```
 
@@ -58,7 +58,7 @@ src/components/      UI (catalogue, booking, dashboard, forms)
 src/lib/             pure logic shared by client and server: dates, pricing, Zod schemas
 src/server/          server-only code: Prisma client, services, auth helpers
 src/proxy.ts         Next 16 "middleware": protects /dashboard and /admin
-tests/integration/   booking rules, concurrency, ownership, earnings, Stripe webhook (real Postgres)
+tests/integration/   booking rules, concurrency, ownership, earnings, Paddle webhook (real Postgres)
 tests/e2e/           Playwright user journeys + axe accessibility checks
 ```
 
@@ -111,18 +111,18 @@ Because the item page is cached, **availability is never baked into it**: the ca
 - Every page, Server Action and Route Handler checks again, and the role is **re-read from the database** rather than trusted from the session token. Role changes therefore take effect immediately.
 - Owner writes go through one function that loads the item **scoped to the owner**. Another owner's item behaves exactly like a missing one (404), so ids can't be probed.
 
-### Stripe webhooks are idempotent and order-independent
+### Payment webhooks are idempotent and order-independent
 
-Stripe delivers webhooks **at least once** and **in no guaranteed order**, so the [handler](src/server/membership.ts) is built for both:
+Membership billing runs on **Paddle Billing in sandbox mode** (the client is hard-wired to `sandbox-api.paddle.com`, so it can never charge a real card). Paddle delivers webhooks **at least once** and **in no guaranteed order**, so the [handler](src/server/membership.ts) is built for both:
 
-- **Signature first.** The raw request body is verified against the `Stripe-Signature` header before anything is trusted.
-- **Idempotent.** Each event's id is inserted into a `StripeEvent` table **in the same database transaction** as the change it causes. A redelivered event, or two copies arriving at once, hits the primary key and is skipped, all or nothing. The handler only answers 2xx after the commit, so Stripe's retries are always safe.
-- **Out-of-order safe.** Each update records the Stripe timestamp of the state it wrote, and the write is a compare-and-set: an older event that arrives late can't overwrite newer state (e.g. a stale "active" after a "cancelled").
-- **No race on sign-up.** The Stripe customer is created (with an idempotency key, so a double-click can't create two) and linked to the user **before** Checkout starts, so every subscription event can find its user. On return from Checkout the subscription is also fetched and applied immediately, so the member doesn't wait for the webhook.
-- **The discount is decided on the server** from the database (`ACTIVE` and the paid period not yet over), never from the client, and a missed "subscription deleted" event can't grant the discount forever.
+- **Signature first.** The `Paddle-Signature` header (`ts=…;h1=…`) must equal HMAC-SHA256 of `ts:rawBody` with the endpoint's secret, compared in constant time, with stale timestamps rejected ([code](src/server/paddle.ts)). The raw body is used exactly as received; re-serialised JSON wouldn't match.
+- **Idempotent.** Each event's id is inserted into a `BillingEvent` table **in the same database transaction** as the change it causes. A redelivered event, or two copies arriving at once, hits the primary key and is skipped, all or nothing. The handler only answers 2xx after the commit, so Paddle's retries are always safe.
+- **Out-of-order safe.** Each update records the event's `occurred_at`, and the write is a compare-and-set: an older event that arrives late can't overwrite newer state (e.g. a stale "active" after "canceled").
+- **Server-created checkout.** The server creates the Paddle customer (linked to the user before checkout, so every webhook can find them) and the transaction (price, customer and user id); the browser only opens Paddle's overlay for that transaction id, so it can't change what is bought or who it's for. On return, the subscription is fetched and applied immediately, so the member doesn't wait for the webhook.
+- **The discount is decided on the server** from the database (`ACTIVE` and the paid period not yet over), never from the client, and a missed "canceled" event can't grant the discount forever.
+- **Provider-neutral core.** Only `src/server/paddle.ts` and one mapping function know Paddle's shapes. The membership logic and tables (`billingCustomerId`, `BillingEvent`) don't, which is how billing moved from Stripe to Paddle (Stripe isn't available in my country) without touching the idempotency or discount logic.
 
-Integration tests send signed and forged requests to the real route: activation, past due, cancellation, sequential and simultaneous duplicates, and out-of-order delivery. The app refuses live Stripe keys, so it can only ever run in test mode.
-
+Unit tests cover signature verification (tampering, wrong secret, replays, secret rotation); integration tests send signed and forged requests to the real route: activation, past due, cancellation, sequential and simultaneous duplicates, and out-of-order delivery.
 ### Smaller decisions
 
 - **Money is integer cents** — no floating-point rounding errors.
@@ -163,14 +163,14 @@ npm run db:seed               # 24 sample listings + demo accounts
 npm run dev                   # http://localhost:3000
 ```
 
-Membership is optional locally. To try it, put a Stripe **test** secret key in `.env` as `STRIPE_SECRET_KEY` and run `npm run stripe:setup`, which creates the $9/month price and the billing portal and prints `STRIPE_PRICE_ID`. To receive webhooks on localhost, use the Stripe CLI (`stripe listen --forward-to localhost:3000/api/webhooks/stripe`) and set `STRIPE_WEBHOOK_SECRET` to the secret it prints. Test card: `4242 4242 4242 4242`, any future date and CVC.
+Membership is optional locally. To try it, create a free [Paddle sandbox](https://sandbox-login.paddle.com/signup) account, add `PADDLE_API_KEY` and `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` (`test_…`) to `.env`, set a default payment link under *Checkout settings*, and run `npm run billing:setup` to create the $9/month price (it prints `PADDLE_PRICE_ID`). Test card: `4242 4242 4242 4242`, any future expiry.
 
 ## Tests
 
 | Command                              | What it runs                                                                                  |
 | ------------------------------------ | --------------------------------------------------------------------------------------------- |
 | `npm test`                           | Unit + component tests (Vitest, React Testing Library, jsdom)                                 |
-| `npm run test:integration`           | Booking rules, ownership, earnings, the Stripe webhook and the **concurrency test** against real Postgres |
+| `npm run test:integration`           | Booking rules, ownership, earnings, the Paddle webhook and the **concurrency test** against real Postgres |
 | `npm run test:e2e`                   | Playwright: builds the app, seeds the test DB, runs the user journeys + axe checks            |
 | `npm run lint` / `npm run typecheck` | ESLint / TypeScript                                                                           |
 
@@ -178,4 +178,4 @@ GitHub Actions runs all of the above on every push and pull request ([workflow](
 
 ## Deployment
 
-Vercel hosts the app; Neon provides Postgres (it supports `btree_gist`). The `vercel-build` script runs `prisma migrate deploy` before `next build`. Required environment variables: `DATABASE_URL` (pooled), `DATABASE_URL_UNPOOLED` (direct, used for migrations) and `AUTH_SECRET`. For membership also `STRIPE_SECRET_KEY` (test mode), `STRIPE_PRICE_ID` and `STRIPE_WEBHOOK_SECRET`; `npm run stripe:setup -- --webhook-url=https://<domain>/api/webhooks/stripe` registers the production webhook endpoint.
+Vercel hosts the app; Neon provides Postgres (it supports `btree_gist`). The `vercel-build` script runs `prisma migrate deploy` before `next build`. Required environment variables: `DATABASE_URL` (pooled), `DATABASE_URL_UNPOOLED` (direct, used for migrations) and `AUTH_SECRET`. For membership also `PADDLE_API_KEY`, `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN`, `PADDLE_PRICE_ID` and `PADDLE_WEBHOOK_SECRET` (all sandbox); `npm run billing:setup -- --webhook-url=https://<domain>/api/webhooks/paddle` creates the price and the webhook destination.
