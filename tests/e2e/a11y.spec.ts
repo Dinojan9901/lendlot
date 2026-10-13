@@ -24,6 +24,16 @@ test.describe("accessibility (axe)", () => {
     await expectNoAxeViolations(page);
   });
 
+  test("owner earnings and membership pages have no detectable WCAG A/AA violations", async ({ page }) => {
+    await signIn(page, "owner@lendlot.test");
+    await page.goto("/dashboard/earnings");
+    await expect(page.getByRole("heading", { name: "Revenue by month" })).toBeVisible();
+    await expectNoAxeViolations(page);
+    await page.goto("/dashboard/membership");
+    await expect(page.getByRole("heading", { name: "Lendlot Member" })).toBeVisible();
+    await expectNoAxeViolations(page);
+  });
+
   test("the calendar can be operated with the keyboard", async ({ page }) => {
     await page.goto("/items/folding-banquet-tables");
     const grid = page.getByRole("grid");
