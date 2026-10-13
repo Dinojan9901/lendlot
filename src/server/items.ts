@@ -36,7 +36,9 @@ export async function searchItems({ q, category, page }: CatalogueParams): Promi
       : {}),
   };
 
-  const [total, items] = await prisma.$transaction([
+  // Two independent reads; a transaction would only add latency and hold a
+  // pooled connection. A count that is off by one during a concurrent edit is harmless.
+  const [total, items] = await Promise.all([
     prisma.item.count({ where }),
     prisma.item.findMany({
       where,

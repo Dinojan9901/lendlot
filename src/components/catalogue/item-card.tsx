@@ -5,7 +5,7 @@ import type { ItemSummary } from "@/server/items";
 
 export function ItemCard({ item, priority = false }: { item: ItemSummary; priority?: boolean }) {
   return (
-    <article className="group card relative flex flex-col overflow-hidden transition-shadow hover:shadow-md">
+    <article className="group card relative flex w-full flex-col overflow-hidden transition-shadow hover:shadow-md">
       <div className="relative aspect-[3/2] bg-stone-100">
         <Image
           src={item.imageUrl}

@@ -30,7 +30,7 @@ const icons: Record<string, string> = {
     <g transform="rotate(-35 100 100)">
       <rect x="88" y="78" width="24" height="110" rx="10" fill="#fff"/>
       <rect x="45" y="30" width="110" height="52" rx="12" fill="#fff"/>
-      <rect x="45" y="44" width="22" height="24" fill="BG" opacity="0.35"/>
+      
     </g>`,
   outdoors: `
     <circle cx="160" cy="42" r="18" fill="#fff" opacity="0.85"/>
