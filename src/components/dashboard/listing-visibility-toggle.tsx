@@ -42,12 +42,12 @@ export function ListingVisibilityToggle({ itemId, title, isActive }: { itemId: s
       >
         <span
           aria-hidden="true"
-          className={`relative h-6 w-11 rounded-full transition-colors ${active ? "bg-brand-700" : "bg-stone-300"}`}
+          className={`flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors ${
+            active ? "bg-brand-700" : "bg-stone-300"
+          }`}
         >
           <span
-            className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform ${
-              active ? "translate-x-5.5" : "translate-x-0.5"
-            }`}
+            className={`size-5 rounded-full bg-white shadow transition-transform ${active ? "translate-x-5" : "translate-x-0"}`}
           />
         </span>
         {active ? "Listed" : "Hidden"}
