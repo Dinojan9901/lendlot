@@ -52,7 +52,7 @@ export function SignUpForm() {
       <fieldset aria-describedby={roleError ? "role-error" : undefined}>
         <legend className="label">Account type</legend>
         <div className="space-y-2">
-          {roles.map((role) => (
+          {roles.map((role, index) => (
             <label
               key={role.value}
               className="flex cursor-pointer items-start gap-3 rounded-lg border border-line bg-white p-3 has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50"
@@ -62,7 +62,7 @@ export function SignUpForm() {
                 name="role"
                 value={role.value}
                 defaultChecked={selectedRole === role.value}
-                aria-invalid={roleError ? true : undefined}
+                data-invalid={roleError && index === 0 ? "true" : undefined}
                 className="mt-1 accent-brand-700"
               />
               <span>

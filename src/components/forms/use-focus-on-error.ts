@@ -11,7 +11,7 @@ export function useFocusOnError(formRef: RefObject<HTMLFormElement | null>, stat
   useEffect(() => {
     if (state.status !== "error" || !formRef.current) return;
     const target =
-      formRef.current.querySelector<HTMLElement>('[aria-invalid="true"]') ??
+      formRef.current.querySelector<HTMLElement>('[aria-invalid="true"], [data-invalid="true"]') ??
       formRef.current.querySelector<HTMLElement>('[data-error-summary]');
     target?.focus();
   }, [formRef, state]);
