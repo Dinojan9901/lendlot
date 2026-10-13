@@ -91,7 +91,7 @@ export default async function ItemPage({ params }: PageProps<"/items/[slug]">) {
               src={item.imageUrl}
               alt={item.title}
               fill
-              priority
+              preload
               sizes="(min-width: 1024px) 700px, 100vw"
               className="object-cover"
             />

@@ -3,7 +3,13 @@ import Link from "next/link";
 import { formatCents } from "@/lib/pricing";
 import type { ItemSummary } from "@/server/items";
 
-export function ItemCard({ item, priority = false }: { item: ItemSummary; priority?: boolean }) {
+type Props = {
+  item: ItemSummary;
+  /** "high": the likely LCP image; "eager": above the fold; "lazy": everything else. */
+  load?: "high" | "eager" | "lazy";
+};
+
+export function ItemCard({ item, load = "lazy" }: Props) {
   return (
     <article className="group card relative flex w-full flex-col overflow-hidden transition-shadow hover:shadow-md">
       <div className="relative aspect-[3/2] bg-stone-100">
@@ -11,7 +17,8 @@ export function ItemCard({ item, priority = false }: { item: ItemSummary; priori
           src={item.imageUrl}
           alt=""
           fill
-          priority={priority}
+          loading={load === "lazy" ? "lazy" : "eager"}
+          fetchPriority={load === "high" ? "high" : "auto"}
           sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
           className="object-cover"
         />

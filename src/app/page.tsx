@@ -56,7 +56,9 @@ async function Catalogue({ searchParams }: Pick<PageProps<"/">, "searchParams">)
           <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {result.items.map((item, index) => (
               <li key={item.id} className="flex">
-                <ItemCard item={item} priority={index < 3} />
+                {/* Which card is the LCP depends on the viewport, so prioritise the first
+                    and load the rest of the first row eagerly (not preload). */}
+                <ItemCard item={item} load={index === 0 ? "high" : index < 3 ? "eager" : "lazy"} />
               </li>
             ))}
           </ul>
