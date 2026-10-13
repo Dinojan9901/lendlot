@@ -1,0 +1,78 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  RENTER
+  OWNER
+  ADMIN
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         Role      @default(RENTER)
+  createdAt    DateTime  @default(now())
+  items        Item[]
+  bookings     Booking[]
+}
+
+model Category {
+  id    String @id @default(cuid())
+  slug  String @unique
+  name  String
+  items Item[]
+}
+
+model Item {
+  id              String    @id @default(cuid())
+  slug            String    @unique
+  title           String
+  description     String
+  dailyPriceCents Int
+  location        String
+  imageUrl        String
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  categoryId      String
+  category        Category  @relation(fields: [categoryId], references: [id])
+  ownerId         String
+  owner           User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  bookings        Booking[]
+
+  @@index([categoryId])
+  @@index([ownerId])
+}
+
+/// startDate and endDate are both inclusive calendar days.
+/// Overlapping CONFIRMED bookings for the same item are rejected by the
+/// "booking_no_overlap" exclusion constraint, which lives in the SQL migration
+/// because Prisma's schema language cannot express it.
+model Booking {
+  id         String        @id @default(cuid())
+  startDate  DateTime      @db.Date
+  endDate    DateTime      @db.Date
+  totalCents Int
+  status     BookingStatus @default(CONFIRMED)
+  createdAt  DateTime      @default(now())
+  itemId     String
+  item       Item          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  renterId   String
+  renter     User          @relation(fields: [renterId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, startDate])
+  @@index([renterId])
+}
