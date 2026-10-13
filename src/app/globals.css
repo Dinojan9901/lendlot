@@ -1,26 +1,58 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --color-brand-50: #ecfdf5;
+  --color-brand-100: #d1fae5;
+  --color-brand-200: #a7f3d0;
+  --color-brand-600: #047857;
+  --color-brand-700: #065f46;
+  --color-brand-800: #064e3b;
+  --color-ink: #1c1917;
+  --color-muted: #57534e;
+  --color-line: #e7e5e4;
+  --color-canvas: #fafaf9;
+  --color-danger: #b91c1c;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@layer base {
+  html {
+    color-scheme: light;
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  body {
+    @apply bg-canvas text-ink;
+  }
+
+  /* One consistent, clearly visible focus ring for keyboard users. */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-600;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60;
+}
+@utility btn-primary {
+  @apply btn bg-brand-700 text-white hover:bg-brand-800;
+}
+@utility btn-secondary {
+  @apply btn border border-line bg-white text-ink hover:bg-stone-100;
+}
+@utility btn-danger {
+  @apply btn border border-red-200 bg-white text-danger hover:bg-red-50;
+}
+@utility input {
+  @apply block w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-sm text-ink placeholder:text-stone-400 aria-invalid:border-danger;
+}
+@utility label {
+  @apply mb-1.5 block text-sm font-medium text-ink;
+}
+@utility field-error {
+  @apply mt-1.5 text-sm text-danger;
+}
+@utility card {
+  @apply rounded-2xl border border-line bg-white;
 }
