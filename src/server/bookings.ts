@@ -66,11 +66,14 @@ export async function listBookingsForRenter(renterId: string) {
   return bookings.map(serializeBooking);
 }
 
-export type BookingWithItem = ReturnType<typeof serializeBooking>;
+export type BookingWithItem = Awaited<ReturnType<typeof listBookingsForRenter>>[number];
 
-function serializeBooking<
-  T extends { startDate: Date; endDate: Date; createdAt: Date },
->(booking: T) {
+type DateFields = "startDate" | "endDate" | "createdAt";
+
+/** Dates become ISO strings so the result can cross the server→client boundary as plain JSON. */
+function serializeBooking<T extends Record<DateFields, Date>>(
+  booking: T,
+): Omit<T, DateFields> & Record<DateFields, string> {
   return {
     ...booking,
     startDate: toIsoDate(booking.startDate),

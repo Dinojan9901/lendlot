@@ -28,8 +28,9 @@ export async function PATCH(request: Request, { params }: RouteContext<"/api/ite
   const { id } = await params;
   try {
     const item = await setListingActive(user, id, parsed.data.isActive);
-    revalidateTag(itemTag(item.slug), "max");
-    revalidateTag(ITEMS_TAG, "max");
+    // Hiding a listing must take effect now, not after a stale-while-revalidate window.
+    revalidateTag(itemTag(item.slug), { expire: 0 });
+    revalidateTag(ITEMS_TAG, { expire: 0 });
     return NextResponse.json({ id: item.id, isActive: item.isActive });
   } catch (error) {
     return handleRouteError(error);
