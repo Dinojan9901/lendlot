@@ -16,12 +16,13 @@ A peer-to-peer rental marketplace: people list things they own (drills, tents, c
 - **Item pages** with SEO/Open Graph metadata, structured data, and an accessible **availability calendar**.
 - **Booking**: pick a date range → live price (10% off for 7+ days) → confirm. Double-booking is impossible, enforced by **PostgreSQL itself**.
 - **Accounts and roles**: renters book, owners manage their own listings, admins manage users.
-- **Dashboards**: "My bookings" (with cancellation) and "My listings" (create, edit, hide).
+- **Dashboards**: "My bookings" (with cancellation), "My listings" (create, edit, hide) and an owner **earnings** dashboard (earned to date, upcoming revenue, revenue by month, upcoming bookings).
+- **Membership**: a monthly subscription through **Stripe Checkout** (test mode) that gives 15% off every rental, kept in sync by an **idempotent webhook**.
 - **REST API** for items and bookings, used by the client components.
 
 ## Tech stack
 
-Next.js 16 (App Router, Cache Components) · React 19 · TypeScript (strict) · Tailwind CSS 4 · PostgreSQL 17 + Prisma 7 · Auth.js v5 · Zod 4 · Vitest + React Testing Library · Playwright + axe · Docker Compose · GitHub Actions · Vercel + Neon
+Next.js 16 (App Router, Cache Components) · React 19 · TypeScript (strict) · Tailwind CSS 4 · PostgreSQL 17 + Prisma 7 · Auth.js v5 · Zod 4 · Stripe (test mode) · Vitest + React Testing Library · Playwright + axe · Docker Compose · GitHub Actions · Vercel + Neon
 
 ## Architecture
 
@@ -35,14 +36,18 @@ flowchart LR
     Proxy[proxy.ts<br/>auth + role redirect]
     Pages[Server Components<br/>'use cache' reads]
     Actions[Server Actions<br/>book, save listing, sign in]
-    API[Route Handlers<br/>/api/items, /api/bookings]
-    Services[src/server<br/>bookings, listings, items]
+    API[Route Handlers<br/>/api/items, /api/bookings, /api/me]
+    Webhook["Webhook<br/>/api/webhooks/stripe"]
+    Services[src/server<br/>bookings, listings, items,<br/>membership, earnings]
   end
   DB[(PostgreSQL<br/>exclusion constraint)]
+  Stripe[(Stripe<br/>test mode)]
 
   RSC --> Proxy --> Pages --> Services
   CC -- fetch --> API --> Services
   CC -- form --> Actions --> Services
+  Actions -- Checkout / portal --> Stripe
+  Stripe -- signed events --> Webhook --> Services
   Services --> DB
 ```
 
@@ -53,7 +58,7 @@ src/components/      UI (catalogue, booking, dashboard, forms)
 src/lib/             pure logic shared by client and server: dates, pricing, Zod schemas
 src/server/          server-only code: Prisma client, services, auth helpers
 src/proxy.ts         Next 16 "middleware": protects /dashboard and /admin
-tests/integration/   booking rules + concurrency against real Postgres
+tests/integration/   booking rules, concurrency, ownership, earnings, Stripe webhook (real Postgres)
 tests/e2e/           Playwright user journeys + axe accessibility checks
 ```
 
@@ -81,6 +86,8 @@ The app therefore does **no** availability pre-check before inserting. It insert
 
 Prisma's schema language can't express exclusion constraints, so this lives in a hand-written migration. `prisma migrate diff` confirms Prisma leaves it alone.
 
+**A race CI caught:** when two overlapping inserts arrive at exactly the same instant, each one waits for the other's uncommitted row while checking the constraint, and Postgres resolves that deadlock by aborting one of them (`40P01`, which Prisma reports as `P2034`) instead of raising `23P01`. No double booking can get through either way, but the user would have seen an error page. `createBooking` therefore retries deadlocks a few times with a small random backoff; a retry either succeeds or hits the constraint cleanly. Unit tests cover the retry deterministically, and the concurrency test runs four times per CI run.
+
 ### Server Components by default, client components only where needed
 
 - The catalogue, item pages and dashboards are **Server Components**: they query the database directly, ship no JavaScript for their content, and are fast to first paint and easy for search engines.
@@ -104,6 +111,18 @@ Because the item page is cached, **availability is never baked into it**: the ca
 - Every page, Server Action and Route Handler checks again, and the role is **re-read from the database** rather than trusted from the session token. Role changes therefore take effect immediately.
 - Owner writes go through one function that loads the item **scoped to the owner**. Another owner's item behaves exactly like a missing one (404), so ids can't be probed.
 
+### Stripe webhooks are idempotent and order-independent
+
+Stripe delivers webhooks **at least once** and **in no guaranteed order**, so the [handler](src/server/membership.ts) is built for both:
+
+- **Signature first.** The raw request body is verified against the `Stripe-Signature` header before anything is trusted.
+- **Idempotent.** Each event's id is inserted into a `StripeEvent` table **in the same database transaction** as the change it causes. A redelivered event, or two copies arriving at once, hits the primary key and is skipped, all or nothing. The handler only answers 2xx after the commit, so Stripe's retries are always safe.
+- **Out-of-order safe.** Each update records the Stripe timestamp of the state it wrote, and the write is a compare-and-set: an older event that arrives late can't overwrite newer state (e.g. a stale "active" after a "cancelled").
+- **No race on sign-up.** The Stripe customer is created (with an idempotency key, so a double-click can't create two) and linked to the user **before** Checkout starts, so every subscription event can find its user. On return from Checkout the subscription is also fetched and applied immediately, so the member doesn't wait for the webhook.
+- **The discount is decided on the server** from the database (`ACTIVE` and the paid period not yet over), never from the client, and a missed "subscription deleted" event can't grant the discount forever.
+
+Integration tests send signed and forged requests to the real route: activation, past due, cancellation, sequential and simultaneous duplicates, and out-of-order delivery. The app refuses live Stripe keys, so it can only ever run in test mode.
+
 ### Smaller decisions
 
 - **Money is integer cents** — no floating-point rounding errors.
@@ -118,6 +137,19 @@ Because the item page is cached, **availability is never baked into it**: the ca
 - Skip link, visible focus ring, live regions for result counts and calendar messages.
 - Playwright runs **axe** (WCAG 2.1 A/AA) on the main pages in CI.
 
+## Lighthouse
+
+Measured on the live site by a [GitHub Actions workflow](.github/workflows/lighthouse.yml) that runs after every production deploy (Lighthouse 12, median of 3 runs, on GitHub's runners):
+
+| Page                                                                    | Device  | Performance | Accessibility | Best practices | SEO |
+| ----------------------------------------------------------------------- | ------- | ----------- | ------------- | -------------- | --- |
+| [Catalogue](https://lendlot.vercel.app/)                                | Mobile  | 99          | 100           | 100            | 100 |
+| [Catalogue](https://lendlot.vercel.app/)                                | Desktop | 100         | 100           | 100            | 100 |
+| [Item page](https://lendlot.vercel.app/items/cordless-drill-driver-kit) | Mobile  | 97          | 100           | 100            | 100 |
+| [Item page](https://lendlot.vercel.app/items/cordless-drill-driver-kit) | Desktop | 100         | 100           | 100            | 100 |
+
+Measured on 2026-10-13. The workflow's job summary and HTML reports have the latest numbers.
+
 ## Running locally
 
 Requirements: Node 22+, Docker.
@@ -131,17 +163,19 @@ npm run db:seed               # 24 sample listings + demo accounts
 npm run dev                   # http://localhost:3000
 ```
 
+Membership is optional locally. To try it, put a Stripe **test** secret key in `.env` as `STRIPE_SECRET_KEY` and run `npm run stripe:setup`, which creates the $9/month price and the billing portal and prints `STRIPE_PRICE_ID`. To receive webhooks on localhost, use the Stripe CLI (`stripe listen --forward-to localhost:3000/api/webhooks/stripe`) and set `STRIPE_WEBHOOK_SECRET` to the secret it prints. Test card: `4242 4242 4242 4242`, any future date and CVC.
+
 ## Tests
 
 | Command                              | What it runs                                                                                  |
 | ------------------------------------ | --------------------------------------------------------------------------------------------- |
 | `npm test`                           | Unit + component tests (Vitest, React Testing Library, jsdom)                                 |
-| `npm run test:integration`           | Booking rules, ownership and the **concurrency test** against the real Postgres test database |
+| `npm run test:integration`           | Booking rules, ownership, earnings, the Stripe webhook and the **concurrency test** against real Postgres |
 | `npm run test:e2e`                   | Playwright: builds the app, seeds the test DB, runs the user journeys + axe checks            |
 | `npm run lint` / `npm run typecheck` | ESLint / TypeScript                                                                           |
 
-GitHub Actions runs all of the above on every push and pull request ([workflow](.github/workflows/ci.yml)).
+GitHub Actions runs all of the above on every push and pull request ([workflow](.github/workflows/ci.yml)), and Lighthouse after every production deploy.
 
 ## Deployment
 
-Vercel hosts the app; Neon provides Postgres (it supports `btree_gist`). The `vercel-build` script runs `prisma migrate deploy` before `next build`. Required environment variables: `DATABASE_URL` (pooled), `DATABASE_URL_UNPOOLED` (direct, used for migrations), `AUTH_SECRET`.
+Vercel hosts the app; Neon provides Postgres (it supports `btree_gist`). The `vercel-build` script runs `prisma migrate deploy` before `next build`. Required environment variables: `DATABASE_URL` (pooled), `DATABASE_URL_UNPOOLED` (direct, used for migrations) and `AUTH_SECRET`. For membership also `STRIPE_SECRET_KEY` (test mode), `STRIPE_PRICE_ID` and `STRIPE_WEBHOOK_SECRET`; `npm run stripe:setup -- --webhook-url=https://<domain>/api/webhooks/stripe` registers the production webhook endpoint.
