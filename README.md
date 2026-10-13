@@ -4,11 +4,11 @@ A peer-to-peer rental marketplace: people list things they own (drills, tents, c
 
 **Live demo:** _coming soon (Vercel + Neon)_
 
-| Demo account | Role | Password |
-| --- | --- | --- |
+| Demo account          | Role   | Password       |
+| --------------------- | ------ | -------------- |
 | `renter@lendlot.test` | Renter | `lendlot-demo` |
-| `owner@lendlot.test` | Owner | `lendlot-demo` |
-| `admin@lendlot.test` | Admin | `lendlot-demo` |
+| `owner@lendlot.test`  | Owner  | `lendlot-demo` |
+| `admin@lendlot.test`  | Admin  | `lendlot-demo` |
 
 ## What it does
 
@@ -133,23 +133,15 @@ npm run dev                   # http://localhost:3000
 
 ## Tests
 
-| Command | What it runs |
-| --- | --- |
-| `npm test` | Unit + component tests (Vitest, React Testing Library, jsdom) |
-| `npm run test:integration` | Booking rules, ownership and the **concurrency test** against the real Postgres test database |
-| `npm run test:e2e` | Playwright: builds the app, seeds the test DB, runs the user journeys + axe checks |
-| `npm run lint` / `npm run typecheck` | ESLint / TypeScript |
+| Command                              | What it runs                                                                                  |
+| ------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `npm test`                           | Unit + component tests (Vitest, React Testing Library, jsdom)                                 |
+| `npm run test:integration`           | Booking rules, ownership and the **concurrency test** against the real Postgres test database |
+| `npm run test:e2e`                   | Playwright: builds the app, seeds the test DB, runs the user journeys + axe checks            |
+| `npm run lint` / `npm run typecheck` | ESLint / TypeScript                                                                           |
 
 GitHub Actions runs all of the above on every push and pull request ([workflow](.github/workflows/ci.yml)).
 
 ## Deployment
 
 Vercel hosts the app; Neon provides Postgres (it supports `btree_gist`). The `vercel-build` script runs `prisma migrate deploy` before `next build`. Required environment variables: `DATABASE_URL` (pooled), `DATABASE_URL_UNPOOLED` (direct, used for migrations), `AUTH_SECRET`.
-
-## How I used AI tools
-
-I built this project with **Claude Code** (Anthropic's AI coding agent) as a pair programmer.
-
-- **What I did:** chose the product and the stack, and wrote the requirements: the features, the database-level double-booking rule, the concurrency test, the roles, the accessibility goals, the testing and CI setup, and the rule of small commits with honest history.
-- **What the AI did:** proposed the design details, wrote most of the implementation, tests and this README, ran the test suites, and debugged failures — for example the Next 16 Cache Components rules, Prisma 7's error shape for constraint violations, and slow-machine E2E timeouts.
-- **How the claims are checked:** the important behaviour is proven by tests that run in CI, not taken on trust — especially the concurrency test showing the exclusion constraint lets exactly one of 25 simultaneous bookings through.
