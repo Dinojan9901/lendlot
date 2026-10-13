@@ -1,0 +1,27 @@
+name: Lighthouse
+
+# Vercel reports each deployment back to GitHub. When a production deploy
+# succeeds, audit the live site; it can also be started by hand.
+on:
+  deployment_status:
+  workflow_dispatch:
+
+jobs:
+  lighthouse:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Audit https://lendlot.vercel.app
+        run: node scripts/lighthouse.mjs https://lendlot.vercel.app 3
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: lighthouse-reports
+          path: lighthouse-reports/*.html
+          retention-days: 30
