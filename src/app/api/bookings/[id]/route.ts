@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { cancelBooking } from "@/server/bookings";
 import { handleRouteError, jsonError, readJson, validationError } from "@/server/http";
+import { rateLimit, tooManyRequests } from "@/server/rate-limit";
 import { getCurrentUser } from "@/server/session";
 
 const patchSchema = z.object({ status: z.literal("CANCELLED") }).strict();
@@ -10,6 +11,9 @@ const patchSchema = z.object({ status: z.literal("CANCELLED") }).strict();
 export async function PATCH(request: Request, { params }: RouteContext<"/api/bookings/[id]">) {
   const user = await getCurrentUser();
   if (!user) return jsonError(401, "Sign in required");
+
+  const limited = await rateLimit("write", user.id);
+  if (!limited.success) return tooManyRequests(limited);
 
   const parsed = patchSchema.safeParse(await readJson(request));
   if (!parsed.success) return validationError(parsed.error);

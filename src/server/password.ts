@@ -22,3 +22,18 @@ export async function verifyPassword(password: string, stored: string): Promise<
   const actual = await scryptAsync(password, Buffer.from(saltB64, "base64"), expected.length);
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
+
+let dummyHash: Promise<string> | undefined;
+
+/**
+ * Like verifyPassword, but when there is no stored hash (unknown email) it
+ * still runs scrypt against a throwaway hash. Sign-in then takes the same
+ * time whether or not an account exists, so response timing can't be used
+ * to discover registered email addresses.
+ */
+export async function verifyPasswordOrDummy(password: string, stored: string | null | undefined): Promise<boolean> {
+  if (stored) return verifyPassword(password, stored);
+  dummyHash ??= hashPassword(randomBytes(16).toString("hex"));
+  await verifyPassword(password, await dummyHash);
+  return false;
+}

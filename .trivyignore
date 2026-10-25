@@ -1,0 +1,10 @@
+# Accepted Trivy findings. CI fails on any HIGH/CRITICAL finding not listed here.
+#
+# Rules: only add a finding that can't be fixed yet (e.g. no patched version
+# exists). Every entry must say why it is accepted and when it expires; after
+# the expiry date Trivy reports it again. Format:
+#
+#   # <package or file>: <why it can't be fixed yet / why it's not exploitable here>
+#   <ID> exp:YYYY-MM-DD
+#
+# Currently empty: there are no accepted findings.

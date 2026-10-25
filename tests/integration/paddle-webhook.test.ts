@@ -115,6 +115,23 @@ describe("Paddle webhook", () => {
     expect((await membershipOf(userId)).membershipStatus).toBe("NONE");
   });
 
+  it.each([
+    ["not JSON", "{oops"],
+    ["missing fields", { event_type: "subscription.created" }],
+    ["a bad subscription status", { ...subscriptionEvent("evt_bad", "subscription.created", { status: "active", occurredAt: NOW }), data: { id: "sub_1", status: "hacked", customer_id: "ctm_123", custom_data: null, current_billing_period: null } }],
+  ])("rejects a correctly signed but malformed event (%s) with 400", async (_label, event) => {
+    const body = typeof event === "string" ? event : JSON.stringify(event);
+    const response = await POST(
+      new Request("http://localhost/api/webhooks/paddle", {
+        method: "POST",
+        headers: { "paddle-signature": signPaddlePayload(body, SECRET) },
+        body,
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect((await membershipOf(userId)).membershipStatus).toBe("NONE");
+  });
+
   it("acknowledges but ignores event types it doesn't handle", async () => {
     const response = await deliver({
       event_id: "evt_other",

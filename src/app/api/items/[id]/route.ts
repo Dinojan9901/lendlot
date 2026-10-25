@@ -5,6 +5,7 @@ import { ITEMS_TAG, itemTag } from "@/server/catalog";
 import { handleRouteError, jsonError, readJson, validationError } from "@/server/http";
 import { getItemById } from "@/server/items";
 import { setListingActive } from "@/server/listings";
+import { rateLimit, tooManyRequests } from "@/server/rate-limit";
 import { getCurrentUser } from "@/server/session";
 
 /** GET /api/items/:id — one active item. */
@@ -21,6 +22,9 @@ const patchSchema = z.object({ isActive: z.boolean() }).strict();
 export async function PATCH(request: Request, { params }: RouteContext<"/api/items/[id]">) {
   const user = await getCurrentUser();
   if (!user) return jsonError(401, "Sign in required");
+
+  const limited = await rateLimit("write", user.id);
+  if (!limited.success) return tooManyRequests(limited);
 
   const parsed = patchSchema.safeParse(await readJson(request));
   if (!parsed.success) return validationError(parsed.error);

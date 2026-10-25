@@ -131,6 +131,39 @@ Unit tests cover signature verification (tampering, wrong secret, replays, secre
 - Skip link, visible focus ring, live regions for result counts and calendar messages.
 - Playwright runs **axe** (WCAG 2.1 A/AA) on the main pages in CI.
 
+## Security
+
+What's in place, mapped to the [OWASP Top 10:2025](https://owasp.org/Top10/). Reporting and CI checks are described in [SECURITY.md](SECURITY.md).
+
+| OWASP category | What Lendlot does |
+| --- | --- |
+| **A01 Broken Access Control** | Every page, Server Action and Route Handler checks the user on the server. The role is re-read from the database, not trusted from the session token. Owner writes load the item scoped to its owner, and someone else's item behaves like a missing one (404). `proxy.ts` is only a first gate. Return URLs are restricted to same-site paths (no open redirects). |
+| **A02 Security Misconfiguration** | A Content-Security-Policy that allows only this origin plus Paddle's script, styles and checkout frame, with `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'` and a restricted `form-action`. Also HSTS, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, `X-Frame-Options`, and no `X-Powered-By`. CI workflows get a read-only token. Trivy scans for misconfigurations. |
+| **A03 Software Supply Chain Failures** | Dependabot (weekly, grouped), `npm audit` and Trivy dependency scanning in CI (fails on HIGH/CRITICAL), and CodeQL. The lockfile is committed. Trivy itself is installed from a checksum-pinned release rather than a third-party action. |
+| **A04 Cryptographic Failures** | Passwords are hashed with scrypt (random salt, constant-time compare). Sessions are signed JWTs in `HttpOnly`, `Secure`, `SameSite=Lax` cookies. HSTS is on. Webhooks are verified with HMAC-SHA256 and a timing-safe comparison. Secrets live only in environment variables, and nothing secret is in the client bundle (only Paddle's public client token). |
+| **A05 Injection** | Every input (forms, JSON bodies, URL params, bound action arguments, webhook payloads) is validated with Zod. Database access goes through Prisma's parameterised queries. React escapes output, and the one raw `<script type="application/ld+json">` is escaped. The CSP limits the damage of any XSS that slips through. |
+| **A06 Insecure Design** | Double-booking is impossible at the database level (exclusion constraint). Prices and the member discount are computed on the server. Paddle checkouts are created on the server, so the browser can't change what is bought. Write endpoints are rate-limited. |
+| **A07 Authentication Failures** | Sign-in is rate-limited per IP + email and per IP (on the form *and* on the raw Auth.js endpoint), with a generic "incorrect email or password" message. Login takes the same time whether or not the email exists, so timing can't reveal accounts. Sample accounts on the live site use a private password. |
+| **A08 Software or Data Integrity Failures** | Paddle webhooks need a valid signature within a 5-minute window, are schema-validated even when signed, and are processed idempotently (each event id is stored in the same transaction as its effect) and order-safely. |
+| **A09 Logging & Alerting Failures** | Unexpected errors and webhook failures are logged server-side (Vercel logs), without being shown to users. *Not done:* alerting, and a security audit log of admin actions. |
+| **A10 Mishandling of Exceptional Conditions** | API errors use one generic shape (no stack traces). Pages fall back to error boundaries that show only a reference id. Malformed webhooks get a 400. If Upstash is unreachable, rate limiting falls back to the in-memory limiter instead of failing open or locking everyone out. |
+
+### Rate limits
+
+| What | Limit | Keyed by |
+| --- | --- | --- |
+| Sign-in (form and `/api/auth/callback/credentials`) | 10 / 10 min, and 50 / 10 min | IP + email, and IP |
+| Registration | 5 / hour | IP |
+| Booking (Server Action and `POST /api/bookings`) | 10 / min | user |
+| Membership checkout / billing portal | 5 / 10 min | user |
+| Other writes (listings, cancellations, visibility, roles) | 30 / min | user |
+
+Route Handlers answer `429 Too Many Requests` with `Retry-After`; forms show the same message inline. In production the counters live in [Upstash Redis](https://upstash.com) (shared by all serverless instances). Without the Upstash env vars (local dev, tests, CI) an in-memory sliding window enforces the same limits per process.
+
+### Why the CSP isn't nonce-based
+
+A per-request nonce forces every page to render dynamically, and Next.js documents that this disables static rendering, ISR and Partial Prerendering. The catalogue and item pages rely on those (they're why Lighthouse scores 97–100). So the CSP is a static header: scripts may come only from this origin and Paddle's CDN, and `'unsafe-inline'` is allowed only for the inline bootstrap scripts and styles Next.js emits. If the pages ever become fully dynamic, the policy can switch to nonces in `src/proxy.ts`.
+
 ## Lighthouse
 
 Measured on the live site by a [GitHub Actions workflow](.github/workflows/lighthouse.yml) that runs after every production deploy (Lighthouse 12, median of 3 runs, on GitHub's runners):

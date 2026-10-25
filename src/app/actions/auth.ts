@@ -1,10 +1,13 @@
 "use server";
 
+import { headers } from "next/headers";
 import { AuthError } from "next-auth";
 import { signIn } from "@/auth";
+import { safeRedirectPath } from "@/lib/safe-redirect";
 import { fieldErrors, signInSchema, signUpSchema, type FieldErrors } from "@/lib/validation";
 import { prisma } from "@/server/db";
 import { hashPassword } from "@/server/password";
+import { clientIp, rateLimit, retryMessage, signInRateLimit } from "@/server/rate-limit";
 
 export type AuthFormState = {
   status: "idle" | "error";
@@ -13,11 +16,6 @@ export type AuthFormState = {
   values?: Record<string, string>;
 };
 
-function safeCallback(value: FormDataEntryValue | null): string {
-  const path = String(value ?? "");
-  return path.startsWith("/") && !path.startsWith("//") ? path : "/dashboard/bookings";
-}
-
 export async function signInAction(_prev: AuthFormState, formData: FormData): Promise<AuthFormState> {
   const raw = { email: String(formData.get("email") ?? ""), password: String(formData.get("password") ?? "") };
   const parsed = signInSchema.safeParse(raw);
@@ -25,8 +23,14 @@ export async function signInAction(_prev: AuthFormState, formData: FormData): Pr
     return { status: "error", fieldErrors: fieldErrors(parsed.error), values: { email: raw.email } };
   }
 
+  const blocked = await signInRateLimit(clientIp(await headers()), parsed.data.email);
+  if (blocked) return { status: "error", message: retryMessage(blocked), values: { email: raw.email } };
+
   try {
-    await signIn("credentials", { ...parsed.data, redirectTo: safeCallback(formData.get("callbackUrl")) });
+    await signIn("credentials", {
+      ...parsed.data,
+      redirectTo: safeRedirectPath(formData.get("callbackUrl"), "/dashboard/bookings"),
+    });
   } catch (error) {
     // signIn redirects by throwing; only real auth failures are handled here.
     if (error instanceof AuthError) {
@@ -45,6 +49,10 @@ export async function signUpAction(_prev: AuthFormState, formData: FormData): Pr
     role: String(formData.get("role") ?? ""),
   };
   const values = { name: raw.name, email: raw.email, role: raw.role };
+
+  const limited = await rateLimit("signUp", clientIp(await headers()));
+  if (!limited.success) return { status: "error", message: retryMessage(limited), values };
+
   const parsed = signUpSchema.safeParse(raw);
   if (!parsed.success) {
     return { status: "error", message: "Please fix the highlighted fields.", fieldErrors: fieldErrors(parsed.error), values };

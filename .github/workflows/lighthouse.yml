@@ -6,6 +6,9 @@ on:
   deployment_status:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   lighthouse:
     if: >-

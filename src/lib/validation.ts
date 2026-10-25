@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { daysInclusive, isIsoDate, todayIso } from "./dates";
 
+// This module is also bundled for the browser. Without this, Zod v4 probes for
+// `Function("")` to JIT-compile parsers; the Content-Security-Policy (no
+// 'unsafe-eval') blocks that probe and the browser reports a violation. Zod
+// works the same either way; jitless just never touches eval-like code.
+z.config({ jitless: true });
+
 export const MAX_RENTAL_DAYS = 30;
 export const PAGE_SIZE = 12;
 

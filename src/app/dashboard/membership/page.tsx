@@ -13,12 +13,18 @@ import { requireUser } from "@/server/session";
 
 export const metadata: Metadata = { title: "Membership" };
 
+/** Paddle transaction ids from the URL are untrusted: accept only the expected shape. */
+const transactionId = (value: string | string[] | undefined) => {
+  const id = firstParam(value);
+  return id && /^txn_[a-z0-9]{10,64}$/.test(id) ? id : undefined;
+};
+
 export default async function MembershipPage({ searchParams }: PageProps<"/dashboard/membership">) {
   const user = await requireUser("/dashboard/membership");
   const params = await searchParams;
   const configured = isPaddleConfigured();
-  const checkoutTransaction = firstParam(params._ptxn);
-  const completedTransaction = firstParam(params.transaction_id);
+  const checkoutTransaction = transactionId(params._ptxn);
+  const completedTransaction = transactionId(params.transaction_id);
 
   // Back from checkout: apply the subscription now instead of waiting for the webhook.
   if (completedTransaction && configured) {
@@ -55,6 +61,11 @@ export default async function MembershipPage({ searchParams }: PageProps<"/dashb
       {firstParam(params.checkout) === "cancelled" && (
         <div role="status" className="mt-4 rounded-xl border border-line bg-white px-4 py-3 text-sm text-muted">
           Checkout cancelled — you haven&apos;t been charged.
+        </div>
+      )}
+      {firstParam(params.error) === "rate_limited" && (
+        <div role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-danger">
+          Too many attempts. Please wait a few minutes and try again.
         </div>
       )}
       {firstParam(params.error) === "unavailable" && (

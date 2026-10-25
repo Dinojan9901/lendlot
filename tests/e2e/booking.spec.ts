@@ -51,6 +51,8 @@ test.describe("booking flow", () => {
     await page.getByRole("button", { name: "Confirm booking" }).click();
 
     await expect(page).toHaveURL(/\/login\?callbackUrl=%2Fitems%2Fsit-on-top-kayak/);
+    // The form carrying callbackUrl streams in and replaces the shell's placeholder form.
+    await page.waitForLoadState("networkidle");
     await page.getByLabel("Email").fill("renter@lendlot.test");
     await page.getByLabel("Password").fill("lendlot-demo");
     await page.getByRole("button", { name: "Sign in" }).click();

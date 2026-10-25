@@ -12,6 +12,10 @@ concurrency:
 env:
   NODE_VERSION: 22
 
+# Least privilege for the GITHUB_TOKEN in every job.
+permissions:
+  contents: read
+
 jobs:
   quality:
     name: Lint, typecheck & unit tests
@@ -93,3 +97,35 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+
+  security-scan:
+    name: Security scan (Trivy + npm audit)
+    runs-on: ubuntu-latest
+    env:
+      TRIVY_VERSION: 0.76.1
+      # Pinned checksum of the official release tarball: a tampered download fails the job.
+      TRIVY_SHA256: c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Trivy (checksum-verified, no third-party action)
+        run: |
+          tarball="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -sSfL -o "$tarball" "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${tarball}"
+          echo "${TRIVY_SHA256}  ${tarball}" | sha256sum --check
+          tar -xzf "$tarball" trivy
+          sudo mv trivy /usr/local/bin/trivy
+          trivy --version
+      - name: Trivy — dependencies, secrets and misconfigurations
+        # Fails on HIGH/CRITICAL. Accepted exceptions live in .trivyignore,
+        # each with a reason and an expiry date.
+        run: >-
+          trivy fs .
+          --scanners vuln,secret,misconfig
+          --severity HIGH,CRITICAL
+          --ignorefile .trivyignore
+          --exit-code 1
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: npm audit (production dependencies)
+        run: npm audit --omit=dev --audit-level=high

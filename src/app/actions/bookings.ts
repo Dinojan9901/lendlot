@@ -1,9 +1,11 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { safeRedirectPath } from "@/lib/safe-redirect";
 import { bookingInputSchema, fieldErrors, type FieldErrors } from "@/lib/validation";
 import { createBooking } from "@/server/bookings";
 import { DomainError, type DomainErrorCode } from "@/server/errors";
+import { rateLimit, retryMessage } from "@/server/rate-limit";
 import { getCurrentUser } from "@/server/session";
 
 export type BookingFormState = {
@@ -27,10 +29,13 @@ export async function createBookingAction(_prev: BookingFormState, formData: For
     endDate: String(formData.get("endDate") ?? ""),
   };
   const values = { startDate: raw.startDate, endDate: raw.endDate };
-  const returnTo = safeReturnPath(String(formData.get("returnTo") ?? "/"));
+  const returnTo = safeRedirectPath(formData.get("returnTo"), "/");
 
   const user = await getCurrentUser();
   if (!user) redirect(`/login?callbackUrl=${encodeURIComponent(returnTo)}`);
+
+  const limited = await rateLimit("booking", user.id);
+  if (!limited.success) return { status: "error", message: retryMessage(limited), values };
 
   const parsed = bookingInputSchema().safeParse(raw);
   if (!parsed.success) {
@@ -56,9 +61,4 @@ export async function createBookingAction(_prev: BookingFormState, formData: For
 
   // redirect() works by throwing, so it must stay outside the try/catch above.
   redirect(`/dashboard/bookings?booked=${bookingId}`);
-}
-
-/** Only allow same-site relative paths, to avoid an open redirect. */
-function safeReturnPath(path: string): string {
-  return path.startsWith("/") && !path.startsWith("//") ? path : "/";
 }
