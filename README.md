@@ -162,20 +162,20 @@ Route Handlers answer `429 Too Many Requests` with `Retry-After`; forms show the
 
 ### Why the CSP isn't nonce-based
 
-A per-request nonce forces every page to render dynamically, and Next.js documents that this disables static rendering, ISR and Partial Prerendering. The catalogue and item pages rely on those (they're why Lighthouse scores 97–100). So the CSP is a static header: scripts may come only from this origin and Paddle's CDN, and `'unsafe-inline'` is allowed only for the inline bootstrap scripts and styles Next.js emits. If the pages ever become fully dynamic, the policy can switch to nonces in `src/proxy.ts`.
+A per-request nonce forces every page to render dynamically, and Next.js documents that this disables static rendering, ISR and Partial Prerendering. The catalogue and item pages rely on those (they're why Lighthouse scores 96–100). So the CSP is a static header: scripts may come only from this origin and Paddle's CDN, and `'unsafe-inline'` is allowed only for the inline bootstrap scripts and styles Next.js emits. If the pages ever become fully dynamic, the policy can switch to nonces in `src/proxy.ts`.
 
 ## Lighthouse
 
-Measured on the live site by a [GitHub Actions workflow](.github/workflows/lighthouse.yml) that runs after every production deploy (Lighthouse 12, median of 3 runs, on GitHub's runners):
+Measured on the live site by a [GitHub Actions workflow](.github/workflows/lighthouse.yml) that runs after every production deploy (Lighthouse 12, median of 3 runs, on GitHub's runners). Performance is **96–100** on every page and device; accessibility, best practices and SEO are 100.
 
 | Page                                                                    | Device  | Performance | Accessibility | Best practices | SEO |
 | ----------------------------------------------------------------------- | ------- | ----------- | ------------- | -------------- | --- |
-| [Catalogue](https://lendlot.vercel.app/)                                | Mobile  | 99          | 100           | 100            | 100 |
+| [Catalogue](https://lendlot.vercel.app/)                                | Mobile  | 98          | 100           | 100            | 100 |
 | [Catalogue](https://lendlot.vercel.app/)                                | Desktop | 100         | 100           | 100            | 100 |
-| [Item page](https://lendlot.vercel.app/items/cordless-drill-driver-kit) | Mobile  | 97          | 100           | 100            | 100 |
+| [Item page](https://lendlot.vercel.app/items/cordless-drill-driver-kit) | Mobile  | 96          | 100           | 100            | 100 |
 | [Item page](https://lendlot.vercel.app/items/cordless-drill-driver-kit) | Desktop | 100         | 100           | 100            | 100 |
 
-Measured on 2026-10-13. The workflow's job summary and HTML reports have the latest numbers.
+Measured on 2026-10-25 (commit `c6492ef`). Mobile scores move by a point or two between runs. A run that hits a Lighthouse trace error is retried, and the job summary shows how many runs succeeded. The workflow's job summary and HTML reports have the latest numbers.
 
 ## Running locally
 
